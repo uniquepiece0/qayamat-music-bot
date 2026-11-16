@@ -1,6 +1,7 @@
 
 import os
 import asyncio
+
 from pyrogram import Client, filters
 import pyrogram.errors
 
@@ -32,36 +33,68 @@ async def ping(_, message):
 
 @client.on_message(filters.command("play"))
 async def play_song(_, message):
+
     if len(message.command) < 2:
-        await message.reply("❌ Song name likho.\nExample: /play Arijit Singh songs")
+        await message.reply(
+            "❌ Song name likho.\n"
+            "Example: /play Arijit Singh songs"
+        )
         return
 
     query = " ".join(message.command[1:])
 
-    status = await message.reply(f"🔎 Searching: {query}")
+    status = await message.reply(
+        f"🔎 Searching: {query}"
+    )
 
     try:
         process = await asyncio.create_subprocess_exec(
             "yt-dlp",
             "--no-warnings",
-            "--print",
-            "webpage_url",
+            "--no-playlist",
+            "--socket-timeout",
+            "15",
+            "--retries",
+            "2",
+            "-g",
+            "-f",
+            "bestaudio/best",
             f"ytsearch1:{query}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
 
-        stdout, stderr = await process.communicate()
-output = stdout.decode().strip()
-video_url = output.splitlines()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=60
+            )
+
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.communicate()
+
+            await status.edit(
+                "❌ YouTube search timeout. Dobara try karo."
+            )
+            return
+
+        output = stdout.decode().strip()
+        video_url = output.splitlines()
 
         if process.returncode != 0 or not video_url:
-            await status.edit("❌ Song nahi mila. Dobara try karo.")
+            error = stderr.decode().strip()
+
+            await status.edit(
+                f"❌ Song nahi mila.\n{error[:250]}"
+            )
             return
 
         youtube_link = video_url[0]
 
-        await status.edit("🎧 Voice Chat mein music start ho raha hai...")
+        await status.edit(
+            "🎧 Voice Chat mein music start ho raha hai..."
+        )
 
         await calls.play(
             message.chat.id,
@@ -73,10 +106,14 @@ video_url = output.splitlines()
             )
         )
 
-        await status.edit(f"🎶 Now Playing: {query}")
+        await status.edit(
+            f"🎶 Now Playing: {query}"
+        )
 
     except Exception as e:
-        await status.edit(f"❌ Playback error: {str(e)[:300]}")
+        await status.edit(
+            f"❌ Playback error: {str(e)[:300]}"
+        )
 
 
 @client.on_message(filters.command("pause"))
@@ -84,8 +121,11 @@ async def pause_song(_, message):
     try:
         await calls.pause(message.chat.id)
         await message.reply("⏸ Music Paused!")
+
     except Exception as e:
-        await message.reply(f"❌ Error: {str(e)[:200]}")
+        await message.reply(
+            f"❌ Error: {str(e)[:200]}"
+        )
 
 
 @client.on_message(filters.command("resume"))
@@ -93,8 +133,11 @@ async def resume_song(_, message):
     try:
         await calls.resume(message.chat.id)
         await message.reply("▶️ Music Resumed!")
+
     except Exception as e:
-        await message.reply(f"❌ Error: {str(e)[:200]}")
+        await message.reply(
+            f"❌ Error: {str(e)[:200]}"
+        )
 
 
 @client.on_message(filters.command("stop"))
@@ -102,15 +145,21 @@ async def stop_song(_, message):
     try:
         await calls.leave_call(message.chat.id)
         await message.reply("⏹ Music Stopped!")
+
     except Exception as e:
-        await message.reply(f"❌ Error: {str(e)[:200]}")
+        await message.reply(
+            f"❌ Error: {str(e)[:200]}"
+        )
 
 
 async def main():
     await client.start()
     await calls.start()
 
-    print("Qayamat Music Engine Started!", flush=True)
+    print(
+        "Qayamat Music Engine Started!",
+        flush=True
+    )
 
     await idle()
 
