@@ -1,5 +1,10 @@
 import os
 from pyrogram import Client, filters
+
+import pyrogram.errors
+
+pyrogram.errors.GroupcallForbidden = pyrogram.errors.Forbidden
+pyrogram.errors.GroupcallInvalid = pyrogram.errors.BadRequest
 from pytgcalls import PyTgCalls, idle
 
 API_ID = int(os.environ["API_ID"])
