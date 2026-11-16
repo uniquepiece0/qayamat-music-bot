@@ -52,7 +52,8 @@ async def play_song(_, message):
         )
 
         stdout, stderr = await process.communicate()
-        video_url = stdout.decode().strip().splitlines()
+output = stdout.decode().strip()
+video_url = output.splitlines()
 
         if process.returncode != 0 or not video_url:
             await status.edit("❌ Song nahi mila. Dobara try karo.")
