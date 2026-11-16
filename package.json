@@ -1,13 +1,12 @@
-
 {
   "name": "qayamat-music-bot",
   "version": "1.0.0",
-  "description": "Qayamat Telegram Music Bot",
   "main": "worker.js",
   "scripts": {
     "start": "node worker.js"
   },
   "dependencies": {
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "yt-search": "^2.12.1"
   }
 }
