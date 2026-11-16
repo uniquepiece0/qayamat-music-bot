@@ -1,4 +1,4 @@
-pyrogrammod>=2.1.2
-py-tgcalls
+py-tgcalls[pyrogram]==3.0.1
+pyrogrammod @ https://github.com/PyrogramMod/PyrogramMod/archive/refs/heads/main.zip
 yt-dlp
 tgcrypto
