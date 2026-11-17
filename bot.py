@@ -48,7 +48,7 @@ async def main():
             "--socket-timeout", "20",
             "--retries", "2",
             "-g",
-            "-f", "best",
+            "-f", "b",
             video_url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
