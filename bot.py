@@ -26,13 +26,13 @@ async def main():
     )
 
     calls = PyTgCalls(client)
-    
+
+    # Auto Next: Song khatam hone par agla song
     @calls.on_update(call_filters.stream_end())
     async def stream_end_handler(_, update):
         try:
             print(f"Song ended in {update.chat_id}", flush=True)
 
-            # Node.js Bot ko agla song chalane ka signal
             await client.send_message(
                 update.chat_id,
                 "/qnext@Qyamatmusicbot"
@@ -40,7 +40,6 @@ async def main():
 
         except Exception as e:
             print(f"Auto-Next error: {e}", flush=True)
-            
 
     # Node.js Bot se song receive karo
     @client.on_message(
@@ -62,6 +61,8 @@ async def main():
             except Exception:
                 pass
 
+            print("YouTube audio URL nikal rahe hain...", flush=True)
+
             process = await asyncio.create_subprocess_exec(
                 "yt-dlp",
                 "--no-warnings",
@@ -77,8 +78,10 @@ async def main():
 
             try:
                 stdout, stderr = await asyncio.wait_for(
-                    process.communicate(), timeout=60
+                    process.communicate(),
+                    timeout=60
                 )
+
             except asyncio.TimeoutError:
                 process.kill()
                 await process.communicate()
@@ -89,7 +92,14 @@ async def main():
 
             if process.returncode != 0 or not urls:
                 print("Song URL nahi mila!", flush=True)
+                print(
+                    "YT-DLP ERROR:",
+                    stderr.decode(errors="replace"),
+                    flush=True
+                )
                 return
+
+            print("Audio URL mil gaya! VC par play kar rahe hain...", flush=True)
 
             await calls.play(
                 message.chat.id,
@@ -106,7 +116,7 @@ async def main():
         except Exception as e:
             print(f"Playback error: {e}", flush=True)
 
-    # Pause button
+    # Pause
     @client.on_message(
         filters.bot & filters.regex(r"^/qpause$")
     )
@@ -118,7 +128,7 @@ async def main():
         except Exception as e:
             print(f"Pause error: {e}", flush=True)
 
-    # Resume button
+    # Resume
     @client.on_message(
         filters.bot & filters.regex(r"^/qresume$")
     )
@@ -130,7 +140,7 @@ async def main():
         except Exception as e:
             print(f"Resume error: {e}", flush=True)
 
-    # Stop button
+    # Stop
     @client.on_message(
         filters.bot & filters.regex(r"^/qstop$")
     )
@@ -142,7 +152,6 @@ async def main():
         except Exception as e:
             print(f"Stop error: {e}", flush=True)
 
-    
     await client.start()
     await calls.start()
 
@@ -156,5 +165,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
-nhi
+                
