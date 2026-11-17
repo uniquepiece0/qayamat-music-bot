@@ -4,6 +4,8 @@ import asyncio
 
 from pyrogram import Client, filters
 import pyrogram.errors
+import static_ffmpeg
+static_ffmpeg.add_paths()
 
 # PyrogramMod compatibility fix
 pyrogram.errors.GroupcallForbidden = pyrogram.errors.Forbidden
