@@ -11,7 +11,19 @@ if (!BOT_TOKEN) {
 
 const bot = new Telegraf(BOT_TOKEN);
 
+// Assistant ID
+let assistantId = process.env.ASSISTANT_ID
+  ? Number(process.env.ASSISTANT_ID)
+  : null;
+
+if (assistantId && !Number.isSafeInteger(assistantId)) {
+  console.error("ASSISTANT_ID invalid!");
+  assistantId = null;
+}
+
+// Music data
 const music = {};
+const invitePower = new Map();
 
 function getMusic(chatId) {
   if (!music[chatId]) {
@@ -100,7 +112,7 @@ function stopProgress(data) {
   }
 }
 
-// Next song ka audio URL pehle se prepare karwana
+// Prepare next song
 async function prepareNext(ctx, chatId) {
   const data = getMusic(chatId);
 
@@ -184,17 +196,221 @@ async function playNext(ctx, chatId) {
   return true;
 }
 
-// Start
+// START
 bot.start((ctx) => {
-  ctx.reply("🎧 Welcome to Qayamat Music!\n\n/play song name");
+  ctx.reply(
+    "🎧 Welcome to Qayamat Music!\n\n" +
+    "🎵 /play song name\n" +
+    "🎬 /vplay song name\n\n" +
+    "/invite on - Assistant invite ON\n" +
+    "/invite off - Assistant invite OFF\n" +
+    "/registerassistant - Register assistant\n" +
+    "/help - Help\n" +
+    "/ping - Bot status"
+  );
 });
 
-// Ping
+// HELP
+bot.command("help", (ctx) => {
+  ctx.reply(
+    "🎧 QAYAMAT MUSIC HELP\n\n" +
+    "🎵 /play - Audio music\n" +
+    "🎬 /vplay - Video search\n" +
+    "⏸ Pause - Player button\n" +
+    "▶️ Resume - Player button\n" +
+    "⏭ Skip - Player button\n" +
+    "⏹ Stop - Player button\n" +
+    "📋 Queue - Player button\n\n" +
+    "/invite on - Assistant invite ON\n" +
+    "/invite off - Assistant invite OFF\n" +
+    "/registerassistant - Register assistant\n" +
+    "/ping - Bot status"
+  );
+});
+
+// PING
 bot.command("ping", (ctx) => {
-  ctx.reply("🏓 Qayamat Music is Online!");
+  ctx.reply("🏓 Qayamat × Beats is Online!");
 });
 
-// Play / Search
+// REGISTER ASSISTANT
+bot.command("registerassistant", async (ctx) => {
+  if (ctx.chat.type !== "private") {
+    return ctx.reply(
+      "❌ Assistant ko ye command bot ke private chat mein bhejni hai."
+    );
+  }
+
+  assistantId = ctx.from.id;
+
+  console.log("ASSISTANT_ID:", assistantId);
+
+  await ctx.reply(
+    "✅ Assistant Registered!\n\n" +
+    "Assistant ID: " + assistantId + "\n\n" +
+    "Voroa Variables mein ASSISTANT_ID naam se ye ID save karna."
+  );
+});
+
+// CHECK GROUP ADMIN
+async function isGroupAdmin(ctx) {
+  if (
+    ctx.chat.type !== "group" &&
+    ctx.chat.type !== "supergroup"
+  ) {
+    return false;
+  }
+
+  const member = await ctx.telegram.getChatMember(
+    ctx.chat.id,
+    ctx.from.id
+  );
+
+  return (
+    member.status === "creator" ||
+    member.status === "administrator"
+  );
+}
+
+// INVITE ON / OFF
+bot.command("invite", async (ctx) => {
+  try {
+    if (
+      ctx.chat.type !== "group" &&
+      ctx.chat.type !== "supergroup"
+    ) {
+      return ctx.reply("❌ Is command ko group mein use karo.");
+    }
+
+    if (!(await isGroupAdmin(ctx))) {
+      return ctx.reply(
+        "❌ Sirf group admins invite power change kar sakte hain."
+      );
+    }
+
+    const args = ctx.message.text
+      .split(/\s+/)
+      .slice(1)
+      .join(" ")
+      .trim()
+      .toLowerCase();
+
+    if (args === "off") {
+      invitePower.set(ctx.chat.id, false);
+
+      return ctx.reply(
+        "🔴 Assistant Invite Power OFF!"
+      );
+    }
+
+    if (args !== "on") {
+      return ctx.reply("Use:\n/invite on\n/invite off");
+    }
+
+    if (!assistantId) {
+      return ctx.reply(
+        "❌ Assistant registered nahi hai.\n\n" +
+        "Assistant se bot ke private chat mein /registerassistant bhejwao."
+      );
+    }
+
+    invitePower.set(ctx.chat.id, true);
+
+    const invite = await ctx.telegram.createChatInviteLink(
+      ctx.chat.id,
+      {
+        member_limit: 1,
+        expire_date: Math.floor(Date.now() / 1000) + 600
+      }
+    );
+
+    await ctx.telegram.sendMessage(
+      assistantId,
+      "🎧 QAYAMAT MUSIC PLAYER\n\n" +
+      "Aapko group mein invite kiya gaya hai.\n\n" +
+      "👇 Join karne ke liye link:\n" +
+      invite.invite_link
+    );
+
+    await ctx.reply(
+      "🟢 Assistant Invite Power ON!\n\n" +
+      "✅ Invite link assistant ko private message kar diya hai."
+    );
+
+  } catch (error) {
+    console.error("Invite error:", error);
+
+    await ctx.reply(
+      "❌ Invite error: " + error.message
+    );
+  }
+});
+
+// SONG SEARCH
+async function searchSong(ctx, mode) {
+  const query = ctx.message.text
+    .split(" ")
+    .slice(1)
+    .join(" ")
+    .trim();
+
+  if (!query) {
+    return ctx.reply(
+      mode === "audio"
+        ? "🎵 Example: /play Kesariya"
+        : "🎬 Example: /vplay Kesariya"
+    );
+  }
+
+  const status = await ctx.reply("🔎 Song search ho raha hai...");
+
+  try {
+    const results = await yts(query);
+    const videos = results.videos.slice(0, 5);
+
+    await ctx.telegram.deleteMessage(
+      ctx.chat.id,
+      status.message_id
+    ).catch(() => {});
+
+    if (!videos.length) {
+      return ctx.reply("❌ Song nahi mila.");
+    }
+
+    for (const video of videos) {
+      const buttonText = mode === "audio"
+        ? "▶️ Play Audio"
+        : "🎬 Play Video";
+
+      await ctx.reply(
+        `🎵 ${video.title}\n\n` +
+        `⏱ Duration: ${video.timestamp}\n` +
+        `👁 Views: ${video.views}\n\n` +
+        "👇 Play karne ke liye button dabayein:",
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              buttonText,
+              `${mode}:${video.videoId}`
+            )
+          ]
+        ])
+      );
+    }
+
+  } catch (error) {
+    console.error("Search error:", error);
+
+    await ctx.telegram.deleteMessage(
+      ctx.chat.id,
+      status.message_id
+    ).catch(() => {});
+
+    await ctx.reply("❌ Search error. Thodi der baad try karo.");
+  }
+}
+
+// AUDIO COMMAND
 bot.command("play", async (ctx) => {
   const query = ctx.message.text
     .split(" ")
@@ -263,7 +479,33 @@ bot.command("play", async (ctx) => {
   }
 });
 
-// Python Engine batayega ki current song start ho gaya
+// VIDEO COMMAND
+bot.command("vplay", async (ctx) => {
+  await searchSong(ctx, "video");
+});
+
+// VIDEO PLAY BUTTON
+bot.action(/^video:(.+)$/, async (ctx) => {
+  try {
+    const videoUrl =
+      `https://www.youtube.com/watch?v=${ctx.match[1]}`;
+
+    await ctx.answerCbQuery("🎬 Video request bhej rahe hain...");
+
+    await ctx.telegram.sendMessage(
+      ctx.callbackQuery.message.chat.id,
+      `/qvplay ${videoUrl}`
+    );
+
+    await ctx.reply("🎬 Video playback request sent!");
+
+  } catch (error) {
+    console.error("Video play error:", error);
+    await ctx.answerCbQuery("❌ Video request failed.");
+  }
+});
+
+// PYTHON ENGINE PLAYING CONFIRMATION
 bot.command("qplaying", async (ctx) => {
   const chatId = ctx.chat.id;
   const data = getMusic(chatId);
@@ -273,7 +515,6 @@ bot.command("qplaying", async (ctx) => {
   await ctx.deleteMessage().catch(() => {});
 
   if (!data.current || !startedUrl) return;
-
   if (startedUrl !== data.current.url) return;
 
   data.playing = true;
@@ -310,19 +551,40 @@ bot.command("qnext", async (ctx) => {
   }
 });
 
-// Pause
+// AUDIO PLAY BUTTON
+bot.action(/^audio:(.+)$/, async (ctx) => {
+  try {
+    const videoUrl =
+      `https://www.youtube.com/watch?v=${ctx.match[1]}`;
+
+    await ctx.answerCbQuery("🎵 Audio request bhej rahe hain...");
+
+    await ctx.telegram.sendMessage(
+      ctx.callbackQuery.message.chat.id,
+      `/qplay ${videoUrl}`
+    );
+
+    await ctx.reply("🎧 Audio playback request sent!");
+
+  } catch (error) {
+    console.error("Audio play error:", error);
+    await ctx.answerCbQuery("❌ Audio request failed.");
+  }
+});
+
+// PAUSE
 bot.action("pause", async (ctx) => {
   await ctx.answerCbQuery("⏸ Pausing...");
   await ctx.telegram.sendMessage(ctx.chat.id, "/qpause");
 });
 
-// Resume
+// RESUME
 bot.action("resume", async (ctx) => {
   await ctx.answerCbQuery("▶️ Resuming...");
   await ctx.telegram.sendMessage(ctx.chat.id, "/qresume");
 });
 
-// Stop
+// STOP
 bot.action("stop", async (ctx) => {
   const chatId = ctx.chat.id;
   const data = getMusic(chatId);
@@ -331,6 +593,7 @@ bot.action("stop", async (ctx) => {
   data.preparingUrl = null;
 
   await finishCurrent(ctx, chatId, "⏹ Music Stopped");
+
   data.current = null;
   data.playing = false;
 
@@ -338,7 +601,7 @@ bot.action("stop", async (ctx) => {
   await ctx.telegram.sendMessage(chatId, "/qstop");
 });
 
-// Skip
+// SKIP
 bot.action("skip", async (ctx) => {
   const chatId = ctx.chat.id;
   const data = getMusic(chatId);
@@ -368,7 +631,7 @@ bot.action("skip", async (ctx) => {
   }
 });
 
-// Queue
+// QUEUE
 bot.action("queue", async (ctx) => {
   const data = getMusic(ctx.chat.id);
 
@@ -380,7 +643,7 @@ bot.action("queue", async (ctx) => {
   await ctx.reply(`📋 SONG QUEUE\n\n${songs}`);
 });
 
-// Cancel
+// CANCEL
 bot.action("cancel", async (ctx) => {
   const chatId = ctx.chat.id;
   const data = getMusic(chatId);
@@ -389,6 +652,7 @@ bot.action("cancel", async (ctx) => {
   data.preparingUrl = null;
 
   await finishCurrent(ctx, chatId, "❌ Player Cancelled");
+
   data.current = null;
   data.playing = false;
 
@@ -396,7 +660,15 @@ bot.action("cancel", async (ctx) => {
   await ctx.telegram.sendMessage(chatId, "/qstop");
 });
 
-// Launch
-bot.launch();
+// LAUNCH - ONLY ONCE
+bot.launch()
+  .then(() => {
+    console.log("Qayamat Music Bot Started!");
+  })
+  .catch((error) => {
+    console.error("BOT LAUNCH ERROR:", error);
+    process.exit(1);
+  });
 
-console.log("Qayamat Music Bot Started!");
+process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGTERM", () => bot.stop("SIGTERM"));
