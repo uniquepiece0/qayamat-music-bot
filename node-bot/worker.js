@@ -187,7 +187,10 @@ bot.command("play", async (ctx) => {
   const status = await ctx.reply("🔎 Song search ho raha hai...");
 
   try {
-    const results = await yts(query);
+    const results = await yts({
+  query: query,
+  pages: 1
+});
     const video = results.videos[0];
 
     if (!video) {
