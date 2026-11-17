@@ -1,3 +1,4 @@
+
 const { Telegraf } = require("telegraf");
 const yts = require("yt-search");
 
@@ -31,11 +32,19 @@ bot.command("play", async (ctx) => {
     const results = await yts(query);
     const video = results.videos[0];
 
-    if (!video) return ctx.reply("❌ Song nahi mila.");
+    if (!video) {
+      return ctx.reply("❌ Song nahi mila.");
+    }
 
-    await ctx.reply(
-      `🎵 ${video.title}\n⏱ ${video.timestamp}\n🔗 ${video.url}`
+    // Python Assistant ko song link bhejo
+    await ctx.telegram.sendMessage(
+      ctx.chat.id,
+      `/qplay ${video.url}`
     );
+
+    // Group mein sirf song ka naam dikhao
+    await ctx.reply(`🎵 ${video.title}`);
+
   } catch (error) {
     console.error(error);
     await ctx.reply("❌ Search error.");
