@@ -40,7 +40,13 @@ async def main():
 
         except Exception as e:
             print(f"Auto-Next error: {e}", flush=True)
-
+    # Debug: Bot ke messages check karo
+    @client.on_message(filters.group & filters.bot)
+    async def debug_bot_messages(_, message):
+        print(
+            f"BOT MESSAGE RECEIVED: {message.text}",
+            flush=True
+        )
     # Node.js Bot se song receive karo
     @client.on_message(
         filters.bot & filters.regex(r"^/qplay(?:@\w+)?\s+")
