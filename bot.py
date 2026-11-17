@@ -12,7 +12,10 @@ static_ffmpeg.add_paths()
 
 print(
     "YT-DLP VERSION:",
-    subprocess.check_output(["yt-dlp", "--version"], text=True).strip(),
+    subprocess.check_output(
+        ["yt-dlp", "--version"],
+        text=True
+    ).strip(),
     flush=True
 )
 
@@ -51,7 +54,7 @@ async def main():
             "-g",
             "--extractor-args",
             "youtube:player_client=android",
-            "-f", "bestaudio/best",
+            "-f", "bestaudio",
             video_url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
@@ -72,7 +75,9 @@ async def main():
 
         if process.returncode != 0 or not urls:
             error = stderr.decode(errors="replace")
-            raise RuntimeError(error[-1000:] or "Audio URL nahi mila!")
+            raise RuntimeError(
+                error[-1000:] or "Audio URL nahi mila!"
+            )
 
         return urls[0]
 
@@ -132,9 +137,15 @@ async def main():
                 flush=True
             )
 
-            await prepare_audio_url(message.chat.id, video_url)
+            await prepare_audio_url(
+                message.chat.id,
+                video_url
+            )
 
-            print("Next song ka audio URL READY hai!", flush=True)
+            print(
+                "Next song ka audio URL READY hai!",
+                flush=True
+            )
 
         except Exception as e:
             print(f"Prefetch error: {e}", flush=True)
@@ -144,7 +155,10 @@ async def main():
     async def stream_end_handler(_, update):
 
         try:
-            print(f"Song ended in {update.chat_id}", flush=True)
+            print(
+                f"Song ended in {update.chat_id}",
+                flush=True
+            )
 
             await client.send_message(
                 update.chat_id,
@@ -154,9 +168,11 @@ async def main():
         except Exception as e:
             print(f"Auto-Next error: {e}", flush=True)
 
-    # Receive and play song
+    # Receive and play song: Audio / Video
     @client.on_message(
-        filters.bot & filters.regex(r"^/qplay(?:@\w+)?\s+")
+        filters.bot & filters.regex(
+            r"^/q(?:v)?play(?:@\w+)?\s+"
+        )
     )
     async def receive_song(_, message):
 
@@ -166,61 +182,94 @@ async def main():
             if len(parts) < 2:
                 return
 
+            command = parts[0].split("@")[0]
             video_url = parts[1].strip()
+
+            video_mode = command == "/qvplay"
 
             try:
                 await message.delete()
             except Exception:
                 pass
 
-            key = (message.chat.id, video_url)
-            cached = prepared_urls.get(key)
+            if video_mode:
 
-            if cached and time.time() - cached[1] < 600:
-
-                audio_url = cached[0]
-                prepared_urls.pop(key, None)
-
-                print("Prepared URL cache se mil gaya!", flush=True)
-
-            else:
-
-                print("YouTube audio URL nikal rahe hain...", flush=True)
-
-                audio_url = await prepare_audio_url(
-                    message.chat.id,
-                    video_url
+                print(
+                    "Video + Audio play ho raha hai...",
+                    flush=True
                 )
 
-                prepared_urls.pop(key, None)
-
-            print(
-                "Audio URL mil gaya! VC par play kar rahe hain...",
-                flush=True
-            )
-
-            await calls.play(
-                message.chat.id,
-                MediaStream(
-                    audio_url,
+                stream = MediaStream(
+                    video_url,
                     AudioQuality.HIGH,
                     VideoQuality.HD_720p
                 )
+
+            else:
+
+                key = (message.chat.id, video_url)
+                cached = prepared_urls.get(key)
+
+                if cached and time.time() - cached[1] < 600:
+
+                    audio_url = cached[0]
+                    prepared_urls.pop(key, None)
+
+                    print(
+                        "Prepared audio URL cache se mil gaya!",
+                        flush=True
+                    )
+
+                else:
+
+                    print(
+                        "YouTube audio URL nikal rahe hain...",
+                        flush=True
+                    )
+
+                    audio_url = await prepare_audio_url(
+                        message.chat.id,
+                        video_url
+                    )
+
+                    prepared_urls.pop(key, None)
+
+                print(
+                    "Only Audio VC par play ho raha hai...",
+                    flush=True
+                )
+
+                stream = MediaStream(
+                    audio_url,
+                    AudioQuality.HIGH,
+                    video_flags=MediaStream.Flags.IGNORE
+                )
+
+            await calls.play(
+                message.chat.id,
+                stream
             )
 
             print("Song started!", flush=True)
 
-            # Notify Node bot that playback has started
+            # Notify Node bot
             try:
                 await client.send_message(
                     message.chat.id,
                     f"/qplaying {video_url}"
                 )
+
             except Exception as e:
-                print(f"Playing status notify error: {e}", flush=True)
+                print(
+                    f"Playing status notify error: {e}",
+                    flush=True
+                )
 
         except Exception as e:
-            print(f"Playback error: {e}", flush=True)
+            print(
+                f"Playback error: {e}",
+                flush=True
+            )
 
     # Pause
     @client.on_message(
@@ -231,6 +280,7 @@ async def main():
         try:
             await message.delete()
             await calls.pause(message.chat.id)
+
             print("Music Paused!", flush=True)
 
         except Exception as e:
@@ -245,6 +295,7 @@ async def main():
         try:
             await message.delete()
             await calls.resume(message.chat.id)
+
             print("Music Resumed!", flush=True)
 
         except Exception as e:
@@ -259,6 +310,7 @@ async def main():
         try:
             await message.delete()
             await calls.leave_call(message.chat.id)
+
             print("Music Stopped!", flush=True)
 
         except Exception as e:
@@ -267,13 +319,19 @@ async def main():
     await client.start()
     await calls.start()
 
-    print("Qayamat Music Engine Started!", flush=True)
+    print(
+        "Qayamat Music Engine Started!",
+        flush=True
+    )
 
     try:
         await idle()
+
     finally:
+        await calls.stop()
         await client.stop()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
