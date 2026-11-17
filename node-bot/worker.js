@@ -19,6 +19,8 @@ function getMusic(chatId) {
       current: null,
       queue: [],
       advancing: false,
+      playing: false,
+      preparingUrl: null,
       progressTimer: null
     };
   }
@@ -88,9 +90,7 @@ async function updateProgress(ctx, chatId) {
       panelText(song, elapsed),
       playerButtons()
     );
-  } catch (error) {
-    // Same text ya Telegram edit error ko ignore karo
-  }
+  } catch (error) {}
 }
 
 function stopProgress(data) {
@@ -100,11 +100,37 @@ function stopProgress(data) {
   }
 }
 
+// Next song ka audio URL pehle se prepare karwana
+async function prepareNext(ctx, chatId) {
+  const data = getMusic(chatId);
+
+  if (!data.playing || !data.queue.length) return;
+
+  const nextSong = data.queue[0];
+
+  if (data.preparingUrl === nextSong.url) return;
+
+  data.preparingUrl = nextSong.url;
+
+  try {
+    await ctx.telegram.sendMessage(
+      chatId,
+      `/qprepare ${nextSong.url}`
+    );
+
+    console.log("Prefetch request:", nextSong.title);
+  } catch (error) {
+    data.preparingUrl = null;
+    console.error("Prefetch error:", error);
+  }
+}
+
 async function finishCurrent(ctx, chatId, status) {
   const data = getMusic(chatId);
   const song = data.current;
 
   stopProgress(data);
+  data.playing = false;
 
   if (song && song.panelMessageId) {
     try {
@@ -124,12 +150,18 @@ async function playNext(ctx, chatId) {
 
   if (!song) {
     data.current = null;
+    data.playing = false;
     return false;
   }
 
   stopProgress(data);
 
+  if (data.preparingUrl === song.url) {
+    data.preparingUrl = null;
+  }
+
   data.current = song;
+  data.playing = false;
   song.startedAt = Date.now();
 
   await ctx.telegram.sendMessage(
@@ -137,7 +169,6 @@ async function playNext(ctx, chatId) {
     `/qplay ${song.url}`
   );
 
-  // Har song ka alag player panel
   const msg = await ctx.telegram.sendMessage(
     chatId,
     panelText(song, 0),
@@ -146,7 +177,6 @@ async function playNext(ctx, chatId) {
 
   song.panelMessageId = msg.message_id;
 
-  // Har 10 second mein progress update
   data.progressTimer = setInterval(() => {
     updateProgress(ctx, chatId).catch(console.error);
   }, 10000);
@@ -188,9 +218,10 @@ bot.command("play", async (ctx) => {
 
   try {
     const results = await yts({
-  query: query,
-  pages: 1
-});
+      query: query,
+      pages: 1
+    });
+
     const video = results.videos[0];
 
     if (!video) {
@@ -218,6 +249,10 @@ bot.command("play", async (ctx) => {
       await playNext(ctx, chatId);
     } else {
       await ctx.reply(`📋 Queue mein add hua:\n🎵 ${video.title}`);
+
+      if (data.playing) {
+        await prepareNext(ctx, chatId);
+      }
     }
 
   } catch (error) {
@@ -226,6 +261,26 @@ bot.command("play", async (ctx) => {
     await ctx.telegram.deleteMessage(chatId, status.message_id).catch(() => {});
     await ctx.reply("❌ Search error.");
   }
+});
+
+// Python Engine batayega ki current song start ho gaya
+bot.command("qplaying", async (ctx) => {
+  const chatId = ctx.chat.id;
+  const data = getMusic(chatId);
+
+  const startedUrl = (ctx.message.text || "").split(/\s+/)[1];
+
+  await ctx.deleteMessage().catch(() => {});
+
+  if (!data.current || !startedUrl) return;
+
+  if (startedUrl !== data.current.url) return;
+
+  data.playing = true;
+
+  console.log("Current song playing. Preparing next song...");
+
+  await prepareNext(ctx, chatId);
 });
 
 // AUTO NEXT
@@ -273,9 +328,11 @@ bot.action("stop", async (ctx) => {
   const data = getMusic(chatId);
 
   data.queue = [];
+  data.preparingUrl = null;
 
   await finishCurrent(ctx, chatId, "⏹ Music Stopped");
   data.current = null;
+  data.playing = false;
 
   await ctx.answerCbQuery("⏹ Music stopped");
   await ctx.telegram.sendMessage(chatId, "/qstop");
@@ -329,9 +386,11 @@ bot.action("cancel", async (ctx) => {
   const data = getMusic(chatId);
 
   data.queue = [];
+  data.preparingUrl = null;
 
   await finishCurrent(ctx, chatId, "❌ Player Cancelled");
   data.current = null;
+  data.playing = false;
 
   await ctx.answerCbQuery("❌ Player cancelled");
   await ctx.telegram.sendMessage(chatId, "/qstop");
