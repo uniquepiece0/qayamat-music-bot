@@ -1,4 +1,4 @@
-
+import subprocess
 import os
 import asyncio
 
@@ -7,6 +7,7 @@ import pyrogram.errors
 import static_ffmpeg
 
 static_ffmpeg.add_paths()
+print("YT-DLP VERSION:", subprocess.check_output(["yt-dlp", "--version"], text=True).strip(), flush=True)
 
 pyrogram.errors.GroupcallForbidden = pyrogram.errors.Forbidden
 pyrogram.errors.GroupcallInvalid = pyrogram.errors.BadRequest
