@@ -48,7 +48,7 @@ async def main():
             "--socket-timeout", "20",
             "--retries", "2",
             "-g",
-            "-f", "bestaudio/best",
+            "-f", "best",
             video_url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
@@ -188,14 +188,12 @@ async def main():
                 prepared_urls.pop(key, None)
 
             print("Audio URL mil gaya! VC par play kar rahe hain...", flush=True)
-
             await calls.play(
                 message.chat.id,
                 MediaStream(
                     audio_url,
                     AudioQuality.HIGH,
-                    VideoQuality.HD_720p,
-                    video_flags=MediaStream.Flags.IGNORE
+                    VideoQuality.HD_720p
                 )
             )
 
