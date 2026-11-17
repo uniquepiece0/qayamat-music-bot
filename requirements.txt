@@ -2,3 +2,4 @@ py-tgcalls[pyrogram]==3.0.1
 pyrogrammod @ https://github.com/PyrogramMod/PyrogramMod/archive/refs/heads/main.zip
 yt-dlp
 tgcrypto
+static-ffmpeg==3.0
