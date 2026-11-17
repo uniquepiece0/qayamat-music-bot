@@ -54,7 +54,7 @@ async def main():
             "-g",
             "--extractor-args",
             "youtube:player_client=android",
-            "-f", "bestaudio",
+            "-f", "bestaudio/best",
             video_url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
