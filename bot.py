@@ -39,6 +39,7 @@ async def main():
     prepared_urls = {}
     preparing_tasks = {}
 
+    # Extract YouTube audio URL
     async def extract_audio_url(video_url):
 
         process = await asyncio.create_subprocess_exec(
@@ -48,7 +49,9 @@ async def main():
             "--socket-timeout", "20",
             "--retries", "2",
             "-g",
-            "-f", "b",
+            "--extractor-args",
+            "youtube:player_client=android",
+            "-f", "bestaudio/best",
             video_url,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
@@ -73,6 +76,7 @@ async def main():
 
         return urls[0]
 
+    # Prepare audio URL with cache
     async def prepare_audio_url(chat_id, video_url):
 
         key = (chat_id, video_url)
@@ -123,7 +127,10 @@ async def main():
             except Exception:
                 pass
 
-            print("Next song ka URL pehle se prepare ho raha hai...", flush=True)
+            print(
+                "Next song ka URL pehle se prepare ho raha hai...",
+                flush=True
+            )
 
             await prepare_audio_url(message.chat.id, video_url)
 
@@ -187,7 +194,11 @@ async def main():
 
                 prepared_urls.pop(key, None)
 
-            print("Audio URL mil gaya! VC par play kar rahe hain...", flush=True)
+            print(
+                "Audio URL mil gaya! VC par play kar rahe hain...",
+                flush=True
+            )
+
             await calls.play(
                 message.chat.id,
                 MediaStream(
