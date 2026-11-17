@@ -35,7 +35,7 @@ async def main():
             # Node.js Bot ko agla song chalane ka signal
             await client.send_message(
                 update.chat_id,
-                "/qnext"
+                "/qnext@Qyamatmusicbot"
             )
 
         except Exception as e:
@@ -157,3 +157,4 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
     
+nhi
