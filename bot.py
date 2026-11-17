@@ -57,7 +57,7 @@ async def main():
         try:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
-                timeout=60
+                timeout=120
             )
 
         except asyncio.TimeoutError:
