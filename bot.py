@@ -126,6 +126,7 @@ async def main():
         except Exception as e:
             print(f"Stop error: {e}", flush=True)
 
+    
     await client.start()
     await calls.start()
 
@@ -134,7 +135,6 @@ async def main():
     try:
         await idle()
     finally:
-        await calls.stop()
         await client.stop()
 
 
