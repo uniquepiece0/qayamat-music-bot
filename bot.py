@@ -12,6 +12,7 @@ pyrogram.errors.GroupcallForbidden = pyrogram.errors.Forbidden
 pyrogram.errors.GroupcallInvalid = pyrogram.errors.BadRequest
 
 from pytgcalls import PyTgCalls, idle
+from pytgcalls import filters as call_filters
 from pytgcalls.types import MediaStream, AudioQuality, VideoQuality
 
 
@@ -25,6 +26,21 @@ async def main():
     )
 
     calls = PyTgCalls(client)
+    
+    @calls.on_update(call_filters.stream_end())
+    async def stream_end_handler(_, update):
+        try:
+            print(f"Song ended in {update.chat_id}", flush=True)
+
+            # Node.js Bot ko agla song chalane ka signal
+            await client.send_message(
+                update.chat_id,
+                "/qnext"
+            )
+
+        except Exception as e:
+            print(f"Auto-Next error: {e}", flush=True)
+            
 
     # Node.js Bot se song receive karo
     @client.on_message(
