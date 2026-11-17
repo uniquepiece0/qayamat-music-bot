@@ -26,20 +26,21 @@ async def main():
 
     calls = PyTgCalls(client)
 
-    # Node.js Search Bot se song link receive karo
-    @client.on_message(filters.bot & filters.regex(r"^/qplay\s+"))
+    # Node.js Bot se song receive karo
+    @client.on_message(
+        filters.bot & filters.regex(r"^/qplay(?:@\w+)?\s+")
+    )
     async def receive_song(_, message):
 
         try:
-            text = message.text or ""
-            parts = text.split(maxsplit=1)
+            parts = (message.text or "").split(maxsplit=1)
 
             if len(parts) < 2:
                 return
 
             video_url = parts[1].strip()
 
-            # Internal message delete karo
+            # Internal message delete
             try:
                 await message.delete()
             except Exception:
@@ -65,11 +66,13 @@ async def main():
             except asyncio.TimeoutError:
                 process.kill()
                 await process.communicate()
+                print("Song search timeout!", flush=True)
                 return
 
             urls = stdout.decode().strip().splitlines()
 
             if process.returncode != 0 or not urls:
+                print("Song URL nahi mila!", flush=True)
                 return
 
             await calls.play(
@@ -82,32 +85,46 @@ async def main():
                 )
             )
 
-            print("Song started in Voice Chat!", flush=True)
+            print("Song started!", flush=True)
 
         except Exception as e:
             print(f"Playback error: {e}", flush=True)
 
-    # Silent controls
-    @client.on_message(filters.command("pause"))
+    # Pause button
+    @client.on_message(
+        filters.bot & filters.regex(r"^/qpause$")
+    )
     async def pause_song(_, message):
         try:
+            await message.delete()
             await calls.pause(message.chat.id)
+            print("Music Paused!", flush=True)
         except Exception as e:
-            print(e, flush=True)
+            print(f"Pause error: {e}", flush=True)
 
-    @client.on_message(filters.command("resume"))
+    # Resume button
+    @client.on_message(
+        filters.bot & filters.regex(r"^/qresume$")
+    )
     async def resume_song(_, message):
         try:
+            await message.delete()
             await calls.resume(message.chat.id)
+            print("Music Resumed!", flush=True)
         except Exception as e:
-            print(e, flush=True)
+            print(f"Resume error: {e}", flush=True)
 
-    @client.on_message(filters.command("stop"))
+    # Stop button
+    @client.on_message(
+        filters.bot & filters.regex(r"^/qstop$")
+    )
     async def stop_song(_, message):
         try:
+            await message.delete()
             await calls.leave_call(message.chat.id)
+            print("Music Stopped!", flush=True)
         except Exception as e:
-            print(e, flush=True)
+            print(f"Stop error: {e}", flush=True)
 
     await client.start()
     await calls.start()
@@ -123,4 +140,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-        
+    
