@@ -11,7 +11,6 @@ if (!BOT_TOKEN) {
 
 const bot = new Telegraf(BOT_TOKEN);
 
-// Har group ki alag music queue
 const music = {};
 
 function getMusic(chatId) {
@@ -19,11 +18,27 @@ function getMusic(chatId) {
     music[chatId] = {
       current: null,
       queue: [],
-      playerMessageId: null,
-      advancing: false
+      advancing: false,
+      progressTimer: null
     };
   }
   return music[chatId];
+}
+
+function formatTime(seconds) {
+  seconds = Math.max(0, Math.floor(seconds || 0));
+  const min = Math.floor(seconds / 60);
+  const sec = seconds % 60;
+  return `${min}:${String(sec).padStart(2, "0")}`;
+}
+
+function progressBar(elapsed, duration) {
+  const total = 12;
+  const filled = duration > 0
+    ? Math.min(total, Math.floor((elapsed / duration) * total))
+    : 0;
+
+  return "▰".repeat(filled) + "▱".repeat(total - filled);
 }
 
 function playerButtons() {
@@ -43,7 +58,66 @@ function playerButtons() {
   ]);
 }
 
-// Queue se agla song play karo
+function panelText(song, elapsed, status = "▶️ Playing") {
+  return (
+    `🎧 QAYAMAT MUSIC PLAYER\n\n` +
+    `🎵 ${song.title}\n\n` +
+    `👤 Requested by: ${song.requestedBy}\n\n` +
+    `${progressBar(elapsed, song.duration)}\n` +
+    `⏱ ${formatTime(elapsed)} / ${formatTime(song.duration)}\n\n` +
+    `${status}`
+  );
+}
+
+async function updateProgress(ctx, chatId) {
+  const data = getMusic(chatId);
+  const song = data.current;
+
+  if (!song || !song.panelMessageId) return;
+
+  const elapsed = Math.min(
+    song.duration,
+    Math.floor((Date.now() - song.startedAt) / 1000)
+  );
+
+  try {
+    await ctx.telegram.editMessageText(
+      chatId,
+      song.panelMessageId,
+      undefined,
+      panelText(song, elapsed),
+      playerButtons()
+    );
+  } catch (error) {
+    // Same text ya Telegram edit error ko ignore karo
+  }
+}
+
+function stopProgress(data) {
+  if (data.progressTimer) {
+    clearInterval(data.progressTimer);
+    data.progressTimer = null;
+  }
+}
+
+async function finishCurrent(ctx, chatId, status) {
+  const data = getMusic(chatId);
+  const song = data.current;
+
+  stopProgress(data);
+
+  if (song && song.panelMessageId) {
+    try {
+      await ctx.telegram.editMessageText(
+        chatId,
+        song.panelMessageId,
+        undefined,
+        panelText(song, song.duration, status)
+      );
+    } catch (error) {}
+  }
+}
+
 async function playNext(ctx, chatId) {
   const data = getMusic(chatId);
   const song = data.queue.shift();
@@ -53,38 +127,30 @@ async function playNext(ctx, chatId) {
     return false;
   }
 
+  stopProgress(data);
+
   data.current = song;
+  song.startedAt = Date.now();
 
   await ctx.telegram.sendMessage(
     chatId,
     `/qplay ${song.url}`
   );
 
-  const text =
-    `🎧 QAYAMAT MUSIC PLAYER\n\n` +
-    `🎵 ${song.title}\n\n` +
-    `▶️ Now Playing`;
-
-  if (data.playerMessageId) {
-    try {
-      await ctx.telegram.editMessageText(
-        chatId,
-        data.playerMessageId,
-        undefined,
-        text,
-        playerButtons()
-      );
-      return true;
-    } catch (e) {}
-  }
-
+  // Har song ka alag player panel
   const msg = await ctx.telegram.sendMessage(
     chatId,
-    text,
+    panelText(song, 0),
     playerButtons()
   );
 
-  data.playerMessageId = msg.message_id;
+  song.panelMessageId = msg.message_id;
+
+  // Har 10 second mein progress update
+  data.progressTimer = setInterval(() => {
+    updateProgress(ctx, chatId).catch(console.error);
+  }, 10000);
+
   return true;
 }
 
@@ -113,6 +179,11 @@ bot.command("play", async (ctx) => {
   const chatId = ctx.chat.id;
   const data = getMusic(chatId);
 
+  const user = ctx.from;
+  const requestedBy = user.username
+    ? `@${user.username}`
+    : [user.first_name, user.last_name].filter(Boolean).join(" ");
+
   const status = await ctx.reply("🔎 Song search ho raha hai...");
 
   try {
@@ -120,39 +191,36 @@ bot.command("play", async (ctx) => {
     const video = results.videos[0];
 
     if (!video) {
-      await ctx.telegram.deleteMessage(
-        chatId,
-        status.message_id
-      );
+      await ctx.telegram.deleteMessage(chatId, status.message_id);
       return ctx.reply("❌ Song nahi mila.");
+    }
+
+    const duration = Number(video.seconds) || 0;
+
+    if (!duration) {
+      await ctx.telegram.deleteMessage(chatId, status.message_id);
+      return ctx.reply("❌ Song ki duration nahi mili.");
     }
 
     data.queue.push({
       title: video.title,
-      url: video.url
+      url: video.url,
+      duration,
+      requestedBy
     });
 
-    await ctx.telegram.deleteMessage(
-      chatId,
-      status.message_id
-    );
+    await ctx.telegram.deleteMessage(chatId, status.message_id);
 
     if (!data.current && !data.advancing) {
       await playNext(ctx, chatId);
     } else {
-      await ctx.reply(
-        `📋 Queue mein add hua:\n🎵 ${video.title}`
-      );
+      await ctx.reply(`📋 Queue mein add hua:\n🎵 ${video.title}`);
     }
 
   } catch (error) {
     console.error("Search error:", error);
 
-    await ctx.telegram.deleteMessage(
-      chatId,
-      status.message_id
-    ).catch(() => {});
-
+    await ctx.telegram.deleteMessage(chatId, status.message_id).catch(() => {});
     await ctx.reply("❌ Search error.");
   }
 });
@@ -169,26 +237,13 @@ bot.command("qnext", async (ctx) => {
   data.advancing = true;
 
   try {
+    await finishCurrent(ctx, chatId, "✅ Song Completed");
+
     if (data.queue.length > 0) {
       await playNext(ctx, chatId);
     } else {
       data.current = null;
-
-      if (data.playerMessageId) {
-        await ctx.telegram.editMessageText(
-          chatId,
-          data.playerMessageId,
-          undefined,
-          "🎧 QAYAMAT MUSIC PLAYER\n\n📭 Queue khatam ho gayi!"
-        ).catch(() => {});
-
-        data.playerMessageId = null;
-      }
-
-      await ctx.telegram.sendMessage(
-        chatId,
-        "/qstop"
-      );
+      await ctx.telegram.sendMessage(chatId, "/qstop");
     }
   } catch (error) {
     console.error("Auto-Next error:", error);
@@ -200,36 +255,27 @@ bot.command("qnext", async (ctx) => {
 // Pause
 bot.action("pause", async (ctx) => {
   await ctx.answerCbQuery("⏸ Pausing...");
-
-  await ctx.telegram.sendMessage(
-    ctx.chat.id,
-    "/qpause"
-  );
+  await ctx.telegram.sendMessage(ctx.chat.id, "/qpause");
 });
 
 // Resume
 bot.action("resume", async (ctx) => {
   await ctx.answerCbQuery("▶️ Resuming...");
-
-  await ctx.telegram.sendMessage(
-    ctx.chat.id,
-    "/qresume"
-  );
+  await ctx.telegram.sendMessage(ctx.chat.id, "/qresume");
 });
 
 // Stop
 bot.action("stop", async (ctx) => {
-  const data = getMusic(ctx.chat.id);
+  const chatId = ctx.chat.id;
+  const data = getMusic(chatId);
 
   data.queue = [];
+
+  await finishCurrent(ctx, chatId, "⏹ Music Stopped");
   data.current = null;
 
   await ctx.answerCbQuery("⏹ Music stopped");
-
-  await ctx.telegram.sendMessage(
-    ctx.chat.id,
-    "/qstop"
-  );
+  await ctx.telegram.sendMessage(chatId, "/qstop");
 });
 
 // Skip
@@ -242,23 +288,19 @@ bot.action("skip", async (ctx) => {
   }
 
   if (!data.queue.length) {
-    return ctx.answerCbQuery(
-      "❌ Queue mein agla song nahi hai."
-    );
+    return ctx.answerCbQuery("❌ Queue mein agla song nahi hai.");
   }
 
   await ctx.answerCbQuery("⏭ Skipping...");
-
   data.advancing = true;
 
   try {
+    await finishCurrent(ctx, chatId, "⏭ Song Skipped");
     await ctx.telegram.sendMessage(chatId, "/qstop");
 
-    // Assistant ko call chhodne ka samay do
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     await playNext(ctx, chatId);
-
   } catch (error) {
     console.error("Skip error:", error);
   } finally {
@@ -271,44 +313,28 @@ bot.action("queue", async (ctx) => {
   const data = getMusic(ctx.chat.id);
 
   const songs = data.queue.length
-    ? data.queue
-        .map((song, i) => `${i + 1}. ${song.title}`)
-        .join("\n")
+    ? data.queue.map((song, i) => `${i + 1}. ${song.title}`).join("\n")
     : "Queue khaali hai.";
 
   await ctx.answerCbQuery();
-
-  await ctx.reply(
-    `📋 SONG QUEUE\n\n${songs}`
-  );
+  await ctx.reply(`📋 SONG QUEUE\n\n${songs}`);
 });
 
 // Cancel
 bot.action("cancel", async (ctx) => {
-  const data = getMusic(ctx.chat.id);
+  const chatId = ctx.chat.id;
+  const data = getMusic(chatId);
 
   data.queue = [];
+
+  await finishCurrent(ctx, chatId, "❌ Player Cancelled");
   data.current = null;
 
   await ctx.answerCbQuery("❌ Player cancelled");
-
-  await ctx.telegram.sendMessage(
-    ctx.chat.id,
-    "/qstop"
-  );
-
-  if (data.playerMessageId) {
-    await ctx.telegram.deleteMessage(
-      ctx.chat.id,
-      data.playerMessageId
-    ).catch(() => {});
-
-    data.playerMessageId = null;
-  }
+  await ctx.telegram.sendMessage(chatId, "/qstop");
 });
 
 // Launch
 bot.launch();
 
 console.log("Qayamat Music Bot Started!");
-    
