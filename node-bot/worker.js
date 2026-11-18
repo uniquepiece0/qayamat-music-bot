@@ -114,12 +114,32 @@ async function prepareNext(ctx, chatId) {
   data.preparingUrl = nextSong.url;
 
   try {
-    await ctx.telegram.sendMessage(
+    const prepMessage = await ctx.telegram.sendMessage(
       chatId,
-      `/qprepare ${nextSong.url}`
+      `/qprepare ${nextSong.url}`,
+      {
+        link_preview_options: {
+          is_disabled: true
+        }
+      }
     );
 
     console.log("Prefetch request:", nextSong.title);
+
+    // Bot apna QPREPARE message khud delete karega
+    setTimeout(async () => {
+      try {
+        await ctx.telegram.deleteMessage(
+          chatId,
+          prepMessage.message_id
+        );
+
+        console.log("QPREPARE message deleted by bot!");
+      } catch (error) {
+        console.error("QPREPARE delete error:", error.message);
+      }
+    }, 2000);
+
   } catch (error) {
     data.preparingUrl = null;
     console.error("Prefetch error:", error);
