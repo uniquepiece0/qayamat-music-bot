@@ -11,19 +11,8 @@ if (!BOT_TOKEN) {
 
 const bot = new Telegraf(BOT_TOKEN);
 
-// Assistant ID
-let assistantId = process.env.ASSISTANT_ID
-  ? Number(process.env.ASSISTANT_ID)
-  : null;
-
-if (assistantId && !Number.isSafeInteger(assistantId)) {
-  console.error("ASSISTANT_ID invalid!");
-  assistantId = null;
-}
-
 // Music data
 const music = {};
-const invitePower = new Map();
 
 function getMusic(chatId) {
   if (!music[chatId]) {
@@ -202,9 +191,6 @@ bot.start((ctx) => {
     "🎧 Welcome to Qayamat Music!\n\n" +
     "🎵 /play song name\n" +
     "🎬 /vplay song name\n\n" +
-    "/invite on - Assistant invite ON\n" +
-    "/invite off - Assistant invite OFF\n" +
-    "/registerassistant - Register assistant\n" +
     "/help - Help\n" +
     "/ping - Bot status"
   );
@@ -221,9 +207,6 @@ bot.command("help", (ctx) => {
     "⏭ Skip - Player button\n" +
     "⏹ Stop - Player button\n" +
     "📋 Queue - Player button\n\n" +
-    "/invite on - Assistant invite ON\n" +
-    "/invite off - Assistant invite OFF\n" +
-    "/registerassistant - Register assistant\n" +
     "/ping - Bot status"
   );
 });
@@ -231,119 +214,6 @@ bot.command("help", (ctx) => {
 // PING
 bot.command("ping", (ctx) => {
   ctx.reply("🏓 Qayamat × Beats is Online!");
-});
-
-// REGISTER ASSISTANT
-bot.command("registerassistant", async (ctx) => {
-  if (ctx.chat.type !== "private") {
-    return ctx.reply(
-      "❌ Assistant ko ye command bot ke private chat mein bhejni hai."
-    );
-  }
-
-  assistantId = ctx.from.id;
-
-  console.log("ASSISTANT_ID:", assistantId);
-
-  await ctx.reply(
-    "✅ Assistant Registered!\n\n" +
-    "Assistant ID: " + assistantId + "\n\n" +
-    "Voroa Variables mein ASSISTANT_ID naam se ye ID save karna."
-  );
-});
-
-// CHECK GROUP ADMIN
-async function isGroupAdmin(ctx) {
-  if (
-    ctx.chat.type !== "group" &&
-    ctx.chat.type !== "supergroup"
-  ) {
-    return false;
-  }
-
-  const member = await ctx.telegram.getChatMember(
-    ctx.chat.id,
-    ctx.from.id
-  );
-
-  return (
-    member.status === "creator" ||
-    member.status === "administrator"
-  );
-}
-
-// INVITE ON / OFF
-bot.command("invite", async (ctx) => {
-  try {
-    if (
-      ctx.chat.type !== "group" &&
-      ctx.chat.type !== "supergroup"
-    ) {
-      return ctx.reply("❌ Is command ko group mein use karo.");
-    }
-
-    if (!(await isGroupAdmin(ctx))) {
-      return ctx.reply(
-        "❌ Sirf group admins invite power change kar sakte hain."
-      );
-    }
-
-    const args = ctx.message.text
-      .split(/\s+/)
-      .slice(1)
-      .join(" ")
-      .trim()
-      .toLowerCase();
-
-    if (args === "off") {
-      invitePower.set(ctx.chat.id, false);
-
-      return ctx.reply(
-        "🔴 Assistant Invite Power OFF!"
-      );
-    }
-
-    if (args !== "on") {
-      return ctx.reply("Use:\n/invite on\n/invite off");
-    }
-
-    if (!assistantId) {
-      return ctx.reply(
-        "❌ Assistant registered nahi hai.\n\n" +
-        "Assistant se bot ke private chat mein /registerassistant bhejwao."
-      );
-    }
-
-    invitePower.set(ctx.chat.id, true);
-
-    const invite = await ctx.telegram.createChatInviteLink(
-      ctx.chat.id,
-      {
-        member_limit: 1,
-        expire_date: Math.floor(Date.now() / 1000) + 600
-      }
-    );
-
-    await ctx.telegram.sendMessage(
-      assistantId,
-      "🎧 QAYAMAT MUSIC PLAYER\n\n" +
-      "Aapko group mein invite kiya gaya hai.\n\n" +
-      "👇 Join karne ke liye link:\n" +
-      invite.invite_link
-    );
-
-    await ctx.reply(
-      "🟢 Assistant Invite Power ON!\n\n" +
-      "✅ Invite link assistant ko private message kar diya hai."
-    );
-
-  } catch (error) {
-    console.error("Invite error:", error);
-
-    await ctx.reply(
-      "❌ Invite error: " + error.message
-    );
-  }
 });
 
 // SONG SEARCH
