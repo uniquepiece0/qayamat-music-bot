@@ -38,7 +38,6 @@ async def main():
 
     calls = PyTgCalls(client)
 
-    # Prepared audio URL cache
     prepared_urls = {}
     preparing_tasks = {}
 
@@ -115,7 +114,9 @@ async def main():
 
     # Prepare next song in advance
     @client.on_message(
-        filters.bot & filters.regex(r"^/qprepare(?:@\w+)?\s+")
+        filters.bot & filters.regex(
+            r"^/qprepare(?:@\w+)?\s+"
+        )
     )
     async def prepare_next_song(_, message):
 
@@ -127,13 +128,8 @@ async def main():
 
             video_url = parts[1].strip()
 
-            try:
-                await message.delete()
-            except Exception:
-                pass
-
             print(
-                "Next song ka URL pehle se prepare ho raha hai...",
+                "Next song ka URL prepare ho raha hai...",
                 flush=True
             )
 
@@ -148,7 +144,10 @@ async def main():
             )
 
         except Exception as e:
-            print(f"Prefetch error: {e}", flush=True)
+            print(
+                f"Prefetch error: {e}",
+                flush=True
+            )
 
     # Auto Next
     @calls.on_update(call_filters.stream_end())
@@ -166,9 +165,12 @@ async def main():
             )
 
         except Exception as e:
-            print(f"Auto-Next error: {e}", flush=True)
+            print(
+                f"Auto-Next error: {e}",
+                flush=True
+            )
 
-    # Receive and play song: Audio / Video
+    # Receive and play Audio / Video
     @client.on_message(
         filters.bot & filters.regex(
             r"^/q(?:v)?play(?:@\w+)?\s+"
@@ -182,7 +184,7 @@ async def main():
             if len(parts) < 2:
                 return
 
-            command = parts[0].split("@")[0]
+            command = parts[0].split("@")[0].lower()
             video_url = parts[1].strip()
 
             video_mode = command == "/qvplay"
@@ -240,12 +242,16 @@ async def main():
                     video_flags=MediaStream.Flags.IGNORE
                 )
 
+            # PyTgCalls starts playback in the group call
             await calls.play(
                 message.chat.id,
                 stream
             )
 
-            print("Song started!", flush=True)
+            print(
+                "Song started!",
+                flush=True
+            )
 
             # Notify Node bot
             try:
@@ -268,48 +274,69 @@ async def main():
 
     # Pause
     @client.on_message(
-        filters.bot & filters.regex(r"^/qpause$")
+        filters.bot & filters.regex(
+            r"^/qpause(?:@\w+)?$"
+        )
     )
     async def pause_song(_, message):
 
         try:
-            await message.delete()
             await calls.pause(message.chat.id)
 
-            print("Music Paused!", flush=True)
+            print(
+                "Music Paused!",
+                flush=True
+            )
 
         except Exception as e:
-            print(f"Pause error: {e}", flush=True)
+            print(
+                f"Pause error: {e}",
+                flush=True
+            )
 
     # Resume
     @client.on_message(
-        filters.bot & filters.regex(r"^/qresume$")
+        filters.bot & filters.regex(
+            r"^/qresume(?:@\w+)?$"
+        )
     )
     async def resume_song(_, message):
 
         try:
-            await message.delete()
             await calls.resume(message.chat.id)
 
-            print("Music Resumed!", flush=True)
+            print(
+                "Music Resumed!",
+                flush=True
+            )
 
         except Exception as e:
-            print(f"Resume error: {e}", flush=True)
+            print(
+                f"Resume error: {e}",
+                flush=True
+            )
 
     # Stop
     @client.on_message(
-        filters.bot & filters.regex(r"^/qstop$")
+        filters.bot & filters.regex(
+            r"^/qstop(?:@\w+)?$"
+        )
     )
     async def stop_song(_, message):
 
         try:
-            await message.delete()
             await calls.leave_call(message.chat.id)
 
-            print("Music Stopped!", flush=True)
+            print(
+                "Music Stopped!",
+                flush=True
+            )
 
         except Exception as e:
-            print(f"Stop error: {e}", flush=True)
+            print(
+                f"Stop error: {e}",
+                flush=True
+            )
 
     await client.start()
     await calls.start()
@@ -329,4 +356,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
