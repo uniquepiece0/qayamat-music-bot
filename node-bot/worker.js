@@ -3,6 +3,7 @@ const { Telegraf, Markup } = require("telegraf");
 const yts = require("yt-search");
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
+const assistantId = Number(process.env.ASSISTANT_ID);
 
 if (!BOT_TOKEN) {
   console.error("BOT_TOKEN missing!");
@@ -13,6 +14,10 @@ const bot = new Telegraf(BOT_TOKEN);
 
 // Music data
 const music = {};
+
+// Assistant invite settings
+const invitePower = new Map();
+const invitePending = new Set();
 
 function getMusic(chatId) {
   if (!music[chatId]) {
@@ -26,6 +31,87 @@ function getMusic(chatId) {
     };
   }
   return music[chatId];
+}
+
+// Check group admin
+async function isGroupAdmin(ctx) {
+  try {
+    if (!ctx.from || !ctx.chat) return false;
+
+    const member = await ctx.telegram.getChatMember(
+      ctx.chat.id,
+      ctx.from.id
+    );
+
+    return (
+      member.status === "creator" ||
+      member.status === "administrator"
+    );
+  } catch (error) {
+    console.error("Admin check error:", error.message);
+    return false;
+  }
+}
+
+// Automatically invite Assistant privately
+async function autoInviteAssistant(ctx) {
+  const chatId = ctx.chat.id;
+
+  if (!assistantId || !Number.isSafeInteger(assistantId)) {
+    console.error("ASSISTANT_ID missing or invalid!");
+    return false;
+  }
+
+  if (invitePower.get(chatId) !== true) return false;
+
+  if (invitePending.has(chatId)) return false;
+
+  invitePending.add(chatId);
+
+  try {
+    const member = await ctx.telegram.getChatMember(
+      chatId,
+      assistantId
+    );
+
+    if (
+      member.status === "creator" ||
+      member.status === "administrator" ||
+      member.status === "member"
+    ) {
+      console.log("Assistant already in group:", chatId);
+      return true;
+    }
+
+    if (member.status === "kicked") {
+      console.log("Assistant is banned from group:", chatId);
+      return false;
+    }
+
+    const invite = await ctx.telegram.createChatInviteLink(
+      chatId,
+      {
+        member_limit: 1,
+        expire_date: Math.floor(Date.now() / 1000) + 600
+      }
+    );
+
+    await ctx.telegram.sendMessage(
+      assistantId,
+      `QAYAMAT_AUTOJOIN ${invite.invite_link}`
+    );
+
+    console.log("Private auto invite sent to Assistant:", chatId);
+    return true;
+
+  } catch (error) {
+    console.error("Assistant Auto Invite Error:", error.message);
+
+    return false;
+
+  } finally {
+    invitePending.delete(chatId);
+  }
 }
 
 // Send internal command and delete it automatically
@@ -234,6 +320,8 @@ bot.command("help", (ctx) => {
     "⏭ Skip - Player button\n" +
     "⏹ Stop - Player button\n" +
     "📋 Queue - Player button\n\n" +
+    "/invite on - Assistant Auto Invite ON\n" +
+    "/invite off - Assistant Auto Invite OFF\n\n" +
     "/ping - Bot status"
   );
 });
@@ -241,6 +329,65 @@ bot.command("help", (ctx) => {
 // PING
 bot.command("ping", (ctx) => {
   ctx.reply("🏓 Qayamat × Beats is Online!");
+});
+
+// INVITE ON / OFF
+bot.command("invite", async (ctx) => {
+  try {
+    if (
+      ctx.chat.type !== "group" &&
+      ctx.chat.type !== "supergroup"
+    ) {
+      return ctx.reply("❌ Ye command sirf group mein chalegi.");
+    }
+
+    const isAdmin = await isGroupAdmin(ctx);
+
+    if (!isAdmin) {
+      return ctx.reply("❌ Sirf Group Admin ye command chala sakta hai.");
+    }
+
+    const args = (ctx.message.text || "")
+      .trim()
+      .split(/\s+/);
+
+    const option = (args[1] || "").toLowerCase();
+
+    if (option === "on") {
+      invitePower.set(ctx.chat.id, true);
+
+      await ctx.reply(
+        "✅ Assistant Auto Invite ON!\n\n" +
+        "Assistant ko privately invite karne ki koshish ho rahi hai."
+      );
+
+      const joined = await autoInviteAssistant(ctx);
+
+      if (!joined) {
+        await ctx.reply(
+          "⚠️ Assistant invite nahi ho paya.\n" +
+          "Node.js Logs check karo. Bot ke paas Invite Users permission honi chahiye."
+        );
+      }
+
+    } else if (option === "off") {
+      invitePower.set(ctx.chat.id, false);
+
+      await ctx.reply("❌ Assistant Auto Invite OFF!");
+
+    } else {
+      await ctx.reply(
+        "Use:\n/invite on\n/invite off"
+      );
+    }
+
+  } catch (error) {
+    console.error("Invite command error:", error);
+
+    await ctx.reply(
+      "❌ Invite command error: " + error.message
+    ).catch(() => {});
+  }
 });
 
 // SONG SEARCH
@@ -258,6 +405,8 @@ async function searchSong(ctx, mode) {
         : "🎬 Example: /vplay Kesariya"
     );
   }
+
+  await autoInviteAssistant(ctx);
 
   const status = await ctx.reply("🔎 Song search ho raha hai...");
 
@@ -318,6 +467,8 @@ bot.command("play", async (ctx) => {
   if (!query) {
     return ctx.reply("🎵 Example: /play Kesariya");
   }
+
+  await autoInviteAssistant(ctx);
 
   const chatId = ctx.chat.id;
   const data = getMusic(chatId);
