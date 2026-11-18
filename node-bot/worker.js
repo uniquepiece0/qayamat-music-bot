@@ -28,6 +28,30 @@ function getMusic(chatId) {
   return music[chatId];
 }
 
+// Send internal command and delete it automatically
+async function sendHiddenCommand(ctx, chatId, command) {
+  const sent = await ctx.telegram.sendMessage(
+    chatId,
+    command,
+    {
+      link_preview_options: {
+        is_disabled: true
+      }
+    }
+  );
+
+  setTimeout(async () => {
+    try {
+      await ctx.telegram.deleteMessage(chatId, sent.message_id);
+      console.log("Internal command deleted:", command.split(" ")[0]);
+    } catch (error) {
+      console.error("Internal command delete error:", error.message);
+    }
+  }, 2000);
+
+  return sent;
+}
+
 function formatTime(seconds) {
   seconds = Math.max(0, Math.floor(seconds || 0));
   const min = Math.floor(seconds / 60);
@@ -114,31 +138,13 @@ async function prepareNext(ctx, chatId) {
   data.preparingUrl = nextSong.url;
 
   try {
-    const prepMessage = await ctx.telegram.sendMessage(
+    await sendHiddenCommand(
+      ctx,
       chatId,
-      `/qprepare ${nextSong.url}`,
-      {
-        link_preview_options: {
-          is_disabled: true
-        }
-      }
+      `/qprepare ${nextSong.url}`
     );
 
     console.log("Prefetch request:", nextSong.title);
-
-    // Bot apna QPREPARE message khud delete karega
-    setTimeout(async () => {
-      try {
-        await ctx.telegram.deleteMessage(
-          chatId,
-          prepMessage.message_id
-        );
-
-        console.log("QPREPARE message deleted by bot!");
-      } catch (error) {
-        console.error("QPREPARE delete error:", error.message);
-      }
-    }, 2000);
 
   } catch (error) {
     data.preparingUrl = null;
@@ -185,7 +191,8 @@ async function playNext(ctx, chatId) {
   data.playing = false;
   song.startedAt = Date.now();
 
-  await ctx.telegram.sendMessage(
+  await sendHiddenCommand(
+    ctx,
     chatId,
     `/qplay ${song.url}`
   );
@@ -382,7 +389,8 @@ bot.action(/^video:(.+)$/, async (ctx) => {
 
     await ctx.answerCbQuery("🎬 Video request bhej rahe hain...");
 
-    await ctx.telegram.sendMessage(
+    await sendHiddenCommand(
+      ctx,
       ctx.callbackQuery.message.chat.id,
       `/qvplay ${videoUrl}`
     );
@@ -449,12 +457,11 @@ bot.action(/^audio:(.+)$/, async (ctx) => {
 
     await ctx.answerCbQuery("🎵 Audio request bhej rahe hain...");
 
-    await ctx.telegram.sendMessage(
+    await sendHiddenCommand(
+      ctx,
       ctx.callbackQuery.message.chat.id,
       `/qplay ${videoUrl}`
     );
-
-    await ctx.reply("🎧 Audio playback request sent!");
 
   } catch (error) {
     console.error("Audio play error:", error);
@@ -533,21 +540,32 @@ bot.action("queue", async (ctx) => {
   await ctx.reply(`📋 SONG QUEUE\n\n${songs}`);
 });
 
-// CANCEL
+// CANCEL - DELETE ONLY PLAYER PANEL
 bot.action("cancel", async (ctx) => {
   const chatId = ctx.chat.id;
   const data = getMusic(chatId);
+  const song = data.current;
 
-  data.queue = [];
-  data.preparingUrl = null;
+  await ctx.answerCbQuery("Player panel removed");
 
-  await finishCurrent(ctx, chatId, "❌ Player Cancelled");
+  if (song && song.panelMessageId) {
+    try {
+      await ctx.telegram.deleteMessage(
+        chatId,
+        song.panelMessageId
+      );
 
-  data.current = null;
-  data.playing = false;
+      console.log("Player panel deleted!");
+    } catch (error) {
+      console.error("Panel delete error:", error.message);
+    }
 
-  await ctx.answerCbQuery("❌ Player cancelled");
-  await ctx.telegram.sendMessage(chatId, "/qstop");
+    song.panelMessageId = null;
+  }
+
+  stopProgress(data);
+
+  // Music and queue continue running.
 });
 
 // LAUNCH - ONLY ONCE
