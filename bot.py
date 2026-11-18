@@ -41,6 +41,46 @@ async def main():
     prepared_urls = {}
     preparing_tasks = {}
 
+    # Automatically join group from bot's private invite message
+    @client.on_message(
+        filters.private & filters.bot &
+        filters.regex(r"^QAYAMAT_AUTOJOIN\s+")
+    )
+    async def auto_join_group(_, message):
+
+        try:
+            if (
+                not message.from_user
+                or (message.from_user.username or "").lower()
+                != "qyamatmusicbot"
+            ):
+                return
+
+            parts = (message.text or "").split(maxsplit=1)
+
+            if len(parts) < 2:
+                return
+
+            invite_link = parts[1].strip()
+
+            print(
+                "Assistant automatic group join kar raha hai...",
+                flush=True
+            )
+
+            await client.join_chat(invite_link)
+
+            print(
+                "Assistant group successfully joined!",
+                flush=True
+            )
+
+        except Exception as e:
+            print(
+                f"Automatic join error: {e}",
+                flush=True
+            )
+
     # Extract YouTube audio URL
     async def extract_audio_url(video_url):
 
