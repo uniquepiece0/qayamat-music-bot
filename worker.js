@@ -18,6 +18,7 @@ let assistantId = process.env.ASSISTANT_ID
 
 // Har group ki invite setting
 const invitePower = new Map();
+const invitePending = new Set();
 
 // Start
 bot.start((ctx) => {
@@ -35,7 +36,7 @@ bot.start((ctx) => {
 
 // Register assistant (assistant ke private chat se)
 bot.command("registerassistant", async (ctx) => {
-    if (ctx.chat.type !== "private") {
+  if (ctx.chat.type !== "private") {
     return ctx.reply(
       "❌ Ye command assistant ko bot ke private chat mein bhejni hai."
     );
@@ -89,6 +90,71 @@ async function isGroupAdmin(ctx) {
   );
 }
 
+// Automatic Assistant Invite
+async function autoInviteAssistant(ctx) {
+  const chatId = ctx.chat.id;
+
+  if (!assistantId || !invitePower.get(chatId)) {
+    return;
+  }
+
+  if (invitePending.has(chatId)) {
+    return;
+  }
+
+  invitePending.add(chatId);
+
+  try {
+    const member = await ctx.telegram.getChatMember(
+      chatId,
+      assistantId
+    );
+
+    // Assistant already group mein hai
+    if (
+      member.status === "creator" ||
+      member.status === "administrator" ||
+      member.status === "member"
+    ) {
+      console.log("Assistant already group mein hai!");
+      return;
+    }
+
+    // Assistant group se removed ya left hai
+    if (member.status === "kicked") {
+      console.log("Assistant group se banned hai. Auto invite nahi ho sakta.");
+      return;
+    }
+
+    // Create temporary single-use invite
+    const invite = await ctx.telegram.createChatInviteLink(
+      chatId,
+      {
+        member_limit: 1,
+        expire_date: Math.floor(Date.now() / 1000) + 600
+      }
+    );
+
+    // Send private command to Python Assistant
+    await ctx.telegram.sendMessage(
+      assistantId,
+      `QAYAMAT_AUTOJOIN ${invite.invite_link}`
+    );
+
+    console.log(
+      "Automatic invite Assistant ko private message kar diya!"
+    );
+
+  } catch (error) {
+    console.error(
+      "Auto invite error:",
+      error.message
+    );
+  } finally {
+    invitePending.delete(chatId);
+  }
+}
+
 // Invite ON / OFF
 bot.command("invite", async (ctx) => {
   try {
@@ -137,26 +203,9 @@ bot.command("invite", async (ctx) => {
 
     invitePower.set(ctx.chat.id, true);
 
-    // Single-use invite link, 10 minutes validity
-    const invite = await ctx.telegram.createChatInviteLink(
-      ctx.chat.id,
-      {
-        member_limit: 1,
-        expire_date: Math.floor(Date.now() / 1000) + 600
-      }
-    );
-
-    await ctx.telegram.sendMessage(
-      assistantId,
-      "🎧 QAYAMAT MUSIC PLAYER\n\n" +
-      "Aapko group mein invite kiya gaya hai.\n\n" +
-      "👇 Join karne ke liye link:\n" +
-      invite.invite_link
-    );
-
-    await ctx.reply(
-      "🟢 Assistant Invite Power ON!\n\n" +
-      "✅ Invite link assistant ko private message kar diya hai."
+    return ctx.reply(
+      "🟢 Assistant Auto Invite ON!\n\n" +
+      "🎵 Song search hone par Assistant automatically join karne ki koshish karega."
     );
 
   } catch (error) {
@@ -187,6 +236,14 @@ async function searchSongs(ctx, mode) {
   await ctx.reply("🔎 Song search ho raha hai...");
 
   try {
+    // Automatic Assistant invite check
+    if (
+      ctx.chat.type === "group" ||
+      ctx.chat.type === "supergroup"
+    ) {
+      await autoInviteAssistant(ctx);
+    }
+
     const results = await yts(query);
     const videos = results.videos.slice(0, 5);
 
@@ -273,7 +330,7 @@ bot.action(/^video:(.+)$/, async (ctx) => {
 
   } catch (error) {
     console.error("Video play error:", error);
-    await ctx.answerCbQuery("❌ Video request failed.");
+    await ctx.answerCbQuery("❌ Video play request failed.");
   }
 });
 
