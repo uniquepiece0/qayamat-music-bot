@@ -187,11 +187,6 @@ async def main():
 
             video_mode = command == "/qvplay"
 
-            try:
-                await message.delete()
-            except Exception:
-                pass
-
             if video_mode:
 
                 print(
