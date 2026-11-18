@@ -3,8 +3,10 @@ import subprocess
 import os
 import asyncio
 import time
+import re
 
 from pyrogram import Client, filters
+from pyrogram.raw.functions.messages import ImportChatInvite
 import pyrogram.errors
 import static_ffmpeg
 
@@ -63,12 +65,26 @@ async def main():
 
             invite_link = parts[1].strip()
 
+            # Extract invite hash from Telegram invite link
+            match = re.search(
+                r"(?:t\.me/\+|t\.me/joinchat/)([A-Za-z0-9_-]+)",
+                invite_link
+            )
+
+            if not match:
+                raise ValueError("Invalid Telegram invite link!")
+
+            invite_hash = match.group(1)
+
             print(
                 "Assistant automatic group join kar raha hai...",
                 flush=True
             )
 
-            await client.join_chat(invite_link)
+            # Use raw Telegram API to avoid Pyrogram join_chat parsing error
+            await client.invoke(
+                ImportChatInvite(hash=invite_hash)
+            )
 
             print(
                 "Assistant group successfully joined!",
